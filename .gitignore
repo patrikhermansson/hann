@@ -75,10 +75,18 @@ poetry.lock
 coverage.txt
 coverage.out
 coverage.html
-#go.sum
 
 # Miscellaneous files and directories to ignore
 # Add any additional file patterns a directory names that should be ignored down here
 *.log
 bin/
 template-go-project
+*.gob
+*.bin
+*.index
+examples/data/*.csv
+examples/data/*.json
+examples/data/*.parquet
+examples/output/*.csv
+examples/output/*.json
+examples/output/*.parquet
