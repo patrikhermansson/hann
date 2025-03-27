@@ -8,9 +8,10 @@ import (
 	"fmt"
 	"github.com/habedi/hann/core"
 	"github.com/rs/zerolog/log"
+	"github.com/schollz/progressbar/v3"
+	"io"
 	"math"
 	"math/rand"
-	"os"
 	"runtime"
 	"sort"
 	"sync"
@@ -506,7 +507,7 @@ func (h *HNSWIndex) Update(id int, vector []float32) error {
 
 // BulkAdd inserts multiple vectors into the index at once.
 func (h *HNSWIndex) BulkAdd(vectors map[int][]float32) error {
-	// Normalize all vectors in batch if using cosine similarity.
+	// Normalize vectors if using cosine similarity.
 	if h.DistanceName == "cosine" {
 		var vecs [][]float32
 		for _, vector := range vectors {
@@ -545,6 +546,12 @@ func (h *HNSWIndex) BulkAdd(vectors map[int][]float32) error {
 	bulkEf := h.Ef
 	h.Mu.Lock()
 	defer h.Mu.Unlock()
+
+	// Initialize progress bar with a newline after finish.
+	bar := progressbar.NewOptions(len(nodesSlice),
+		progressbar.OptionOnCompletion(func() { fmt.Print("\n") }),
+	)
+
 	for _, newNode := range nodesSlice {
 		h.Nodes[newNode.ID] = newNode
 		if h.EntryPoint == nil {
@@ -557,6 +564,10 @@ func (h *HNSWIndex) BulkAdd(vectors map[int][]float32) error {
 			}
 			h.insertNode(newNode, bulkEf)
 		}
+		err := bar.Add(1)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -565,14 +576,28 @@ func (h *HNSWIndex) BulkAdd(vectors map[int][]float32) error {
 func (h *HNSWIndex) BulkDelete(ids []int) error {
 	h.Mu.Lock()
 	defer h.Mu.Unlock()
+
+	// Initialize progress bar with newline on completion.
+	bar := progressbar.NewOptions(len(ids),
+		progressbar.OptionOnCompletion(func() { fmt.Print("\n") }),
+	)
 	for _, id := range ids {
 		node, exists := h.Nodes[id]
 		if !exists {
+			err := bar.Add(1)
+			if err != nil {
+				return err
+			}
 			continue
 		}
 		h.removeNodeLinks(node)
 		delete(h.Nodes, id)
+		err := bar.Add(1)
+		if err != nil {
+			return err
+		}
 	}
+
 	// Clean up links in remaining nodes.
 	for _, n := range h.Nodes {
 		for L, neighbors := range n.Links {
@@ -612,9 +637,18 @@ func (h *HNSWIndex) BulkUpdate(updates map[int][]float32) error {
 
 	h.Mu.Lock()
 	defer h.Mu.Unlock()
+
+	// Progress bar for processing updates with newline on finish.
+	bar := progressbar.NewOptions(len(updates),
+		progressbar.OptionOnCompletion(func() { fmt.Print("\n") }),
+	)
 	for id, vector := range updates {
 		node, exists := h.Nodes[id]
 		if !exists {
+			err := bar.Add(1)
+			if err != nil {
+				return err
+			}
 			continue
 		}
 		if len(vector) != h.Dimension {
@@ -625,7 +659,12 @@ func (h *HNSWIndex) BulkUpdate(updates map[int][]float32) error {
 		node.Vector = vector
 		node.Links = make(map[int][]*Node)
 		node.ReverseLinks = make(map[int][]*Node)
+		err := bar.Add(1)
+		if err != nil {
+			return err
+		}
 	}
+
 	// Reinsert all nodes to rebuild links.
 	allNodes := make([]*Node, 0, len(h.Nodes))
 	for _, node := range h.Nodes {
@@ -636,12 +675,21 @@ func (h *HNSWIndex) BulkUpdate(updates map[int][]float32) error {
 	})
 	h.EntryPoint = nil
 	h.MaxLevel = -1
+
+	// Progress bar for reinsertion with newline on finish.
+	bar = progressbar.NewOptions(len(allNodes),
+		progressbar.OptionOnCompletion(func() { fmt.Print("\n") }),
+	)
 	for _, node := range allNodes {
 		if h.EntryPoint == nil || node.Level > h.MaxLevel {
 			h.EntryPoint = node
 			h.MaxLevel = node.Level
 		}
 		h.insertNode(node, h.Ef)
+		err := bar.Add(1)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -684,6 +732,11 @@ func (h *HNSWIndex) Search(query []float32, k int) ([]core.Neighbor, error) {
 	candidates := h.searchLayer(query, current, 0, h.Ef, h.Distance)
 	if len(candidates) < k {
 		// Use fallback to gather more candidates if needed.
+
+		// Log that fallback is triggered.
+		log.Warn().Msgf("Fallback search triggered: insufficient candidates from"+
+			" searchLayer; only %d found", len(candidates))
+
 		candidateIDs := make(map[int]bool)
 		for _, c := range candidates {
 			candidateIDs[c.node.ID] = true
@@ -789,37 +842,27 @@ func (h *HNSWIndex) Stats() core.IndexStats {
 	return stats
 }
 
-// Save writes the index to disk using gob encoding.
-func (h *HNSWIndex) Save(path string) error {
+// Save writes the index to the given writer using gob encoding.
+func (h *HNSWIndex) Save(w io.Writer) error {
 	h.Mu.RLock()
 	defer h.Mu.RUnlock()
-	f, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	enc := gob.NewEncoder(f)
+	enc := gob.NewEncoder(w)
 	if err := enc.Encode(h); err != nil {
 		return err
 	}
-	log.Info().Msgf("Index saved to %s", path)
+	log.Info().Msg("Index saved")
 	return nil
 }
 
-// Load reads the index from disk using gob decoding.
-func (h *HNSWIndex) Load(path string) error {
+// Load reads the index from the given reader using gob decoding.
+func (h *HNSWIndex) Load(r io.Reader) error {
 	h.Mu.Lock()
 	defer h.Mu.Unlock()
-	f, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	dec := gob.NewDecoder(f)
+	dec := gob.NewDecoder(r)
 	if err := dec.Decode(h); err != nil {
 		return err
 	}
-	log.Info().Msgf("Index loaded from %s", path)
+	log.Info().Msg("Index loaded")
 	return nil
 }
 
