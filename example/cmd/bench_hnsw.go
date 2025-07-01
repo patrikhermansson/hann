@@ -4,14 +4,15 @@
 package main
 
 import (
-	"github.com/habedi/hann/core"
-	"github.com/habedi/hann/example"
-	"github.com/habedi/hann/hnsw"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+
+	"github.com/patrikhermansson/hann/core"
+	"github.com/patrikhermansson/hann/example"
+	"github.com/patrikhermansson/hann/hnsw"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 func main() {

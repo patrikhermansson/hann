@@ -5,7 +5,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/habedi/hann/pqivf"
+	"github.com/patrikhermansson/hann/pqivf"
 )
 
 func TestPQIVF_BasicOperations(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/habedi/hann/rpt"
+	"github.com/patrikhermansson/hann/rpt"
 )
 
 const (

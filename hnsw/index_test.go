@@ -5,14 +5,14 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/habedi/hann/core"
-	"github.com/habedi/hann/hnsw"
+	"github.com/patrikhermansson/hann/core"
+	"github.com/patrikhermansson/hann/hnsw"
 )
 
 func TestHNSWIndex_AddAndStats(t *testing.T) {
 	dim := 6
 	distanceName := "euclidean"
-	index := hnsw.NewHNSW(dim, 5, 10, core.Distances[distanceName], distanceName)
+	index := hnsw.NewHNSW(dim, 5, 10, core.Euclidean, distanceName)
 
 	// Test single Add.
 	if err := index.Add(1, []float32{1, 2, 3, 4, 5, 6}); err != nil {

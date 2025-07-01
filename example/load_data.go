@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/habedi/hann/core"
+	"github.com/patrikhermansson/hann/core"
 	"github.com/rs/zerolog/log"
 )
 

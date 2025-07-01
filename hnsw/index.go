@@ -6,15 +6,16 @@ import (
 	"encoding/gob"
 	"errors"
 	"fmt"
-	"github.com/habedi/hann/core"
-	"github.com/rs/zerolog/log"
-	"github.com/schollz/progressbar/v3"
 	"io"
 	"math"
 	"math/rand"
 	"runtime"
 	"sort"
 	"sync"
+
+	"github.com/patrikhermansson/hann/core"
+	"github.com/rs/zerolog/log"
+	"github.com/schollz/progressbar/v3"
 )
 
 // seededRand is a global random number generator used for level generation.
@@ -439,10 +440,7 @@ func (h *HNSWIndex) Add(id int, vector []float32) error {
 		return fmt.Errorf("vector dimension %d does not match index dimension %d",
 			len(vector), h.Dimension)
 	}
-	// Normalize if using cosine similarity.
-	if h.DistanceName == "cosine" {
-		core.NormalizeVector(vector)
-	}
+
 	if _, exists := h.Nodes[id]; exists {
 		return fmt.Errorf("id %d already exists", id)
 	}
@@ -493,10 +491,7 @@ func (h *HNSWIndex) Update(id int, vector []float32) error {
 		return fmt.Errorf("vector dimension %d does not match index dimension %d",
 			len(vector), h.Dimension)
 	}
-	// Normalize vector if using cosine distance.
-	if h.DistanceName == "cosine" {
-		core.NormalizeVector(vector)
-	}
+
 	h.removeNodeLinks(node)
 	node.Vector = vector
 	node.Links = make(map[int][]*Node)
@@ -507,18 +502,6 @@ func (h *HNSWIndex) Update(id int, vector []float32) error {
 
 // BulkAdd inserts multiple vectors into the index at once.
 func (h *HNSWIndex) BulkAdd(vectors map[int][]float32) error {
-	// Normalize vectors if using cosine similarity.
-	if h.DistanceName == "cosine" {
-		var vecs [][]float32
-		for _, vector := range vectors {
-			if len(vector) != h.Dimension {
-				return fmt.Errorf("vector dimension %d does not match index dimension %d",
-					len(vector), h.Dimension)
-			}
-			vecs = append(vecs, vector)
-		}
-		core.NormalizeBatch(vecs)
-	}
 
 	nodesSlice := make([]*Node, 0, len(vectors))
 	for id, vector := range vectors {
@@ -622,18 +605,6 @@ func (h *HNSWIndex) BulkDelete(ids []int) error {
 
 // BulkUpdate updates multiple nodes with new vectors.
 func (h *HNSWIndex) BulkUpdate(updates map[int][]float32) error {
-	// Normalize vectors in batch if needed.
-	if h.DistanceName == "cosine" {
-		var vecs [][]float32
-		for _, vector := range updates {
-			if len(vector) != h.Dimension {
-				return fmt.Errorf("vector dimension %d does not match index dimension %d",
-					len(vector), h.Dimension)
-			}
-			vecs = append(vecs, vector)
-		}
-		core.NormalizeBatch(vecs)
-	}
 
 	h.Mu.Lock()
 	defer h.Mu.Unlock()
@@ -705,14 +676,6 @@ func (h *HNSWIndex) Search(query []float32, k int) ([]core.Neighbor, error) {
 	if h.EntryPoint == nil {
 		return nil, errors.New("index is empty")
 	}
-
-	// Copy query to avoid modifying the original vector.
-	queryCopy := make([]float32, len(query))
-	copy(queryCopy, query)
-	if h.DistanceName == "cosine" {
-		core.NormalizeVector(queryCopy)
-	}
-	query = queryCopy
 
 	// Greedy search down from the top layer.
 	current := h.EntryPoint

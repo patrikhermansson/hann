@@ -2,7 +2,8 @@ package example
 
 import (
 	"fmt"
-	"github.com/habedi/hann/core"
+
+	"github.com/patrikhermansson/hann/core"
 )
 
 // FormatResults returns a formatted string of neighbor results.

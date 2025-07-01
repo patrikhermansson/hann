@@ -10,8 +10,8 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
-	"github.com/habedi/hann/core"
-	"github.com/habedi/hann/hnsw"
+	"github.com/patrikhermansson/hann/core"
+	"github.com/patrikhermansson/hann/hnsw"
 )
 
 // Note: results may vary between different runs even if HANN_SEED is set.
